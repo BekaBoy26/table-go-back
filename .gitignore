@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# secrets: DB password, OAuth secret, JWT secret, Gemini key
+.env
+.env.*
+!.env.example
