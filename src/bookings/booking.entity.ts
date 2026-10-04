@@ -8,6 +8,7 @@ export interface BookingRow {
   table_id: string;
   date: string;
   time: string;
+  hours: number;
   guests: number;
   note: string | null;
   status: BookingStatus;
@@ -29,6 +30,8 @@ export interface Booking {
   tableNumber: number;
   date: string;
   time: string;
+  /** How many hours the table is held from `time`. */
+  hours: number;
   guests: number;
   note: string | null;
   status: BookingStatus;
@@ -67,6 +70,7 @@ export function toBooking(row: BookingRow): Booking {
     tableNumber: row.table_number,
     date: row.date,
     time: row.time,
+    hours: row.hours,
     guests: row.guests,
     note: row.note,
     status: row.status,

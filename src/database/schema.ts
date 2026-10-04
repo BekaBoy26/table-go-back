@@ -93,7 +93,9 @@ END $$;
 
 ALTER TABLE bookings
   ADD COLUMN IF NOT EXISTS code TEXT,
-  ADD COLUMN IF NOT EXISTS note TEXT;
+  ADD COLUMN IF NOT EXISTS note TEXT,
+  -- the table is held from time for this many hours
+  ADD COLUMN IF NOT EXISTS hours INTEGER NOT NULL DEFAULT 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_bookings_code ON bookings (code);
 -- A table can hold only one active booking per slot; guards against double booking.

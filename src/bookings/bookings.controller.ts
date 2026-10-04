@@ -16,7 +16,6 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import type { User } from '../users/user.entity.js';
 import { BookingsService } from './bookings.service.js';
 import {
-  AvailabilityQueryDto,
   CreateBookingDto,
   OccupancyQueryDto,
 } from './dto/create-booking.dto.js';
@@ -24,12 +23,6 @@ import {
 @Controller('bookings')
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
-
-  /** Public: which slots of a day still have a table for the party. */
-  @Get('availability')
-  availability(@Query() query: AvailabilityQueryDto) {
-    return this.bookingsService.availability(query);
-  }
 
   /** Public: every table of the restaurant with its booked slots on a day. */
   @Get('occupancy')

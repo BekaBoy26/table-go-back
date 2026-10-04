@@ -1,20 +1,7 @@
-/** Bookable start times, every 30 minutes. */
-export const SLOT_TIMES = [
-  '17:00',
-  '17:30',
-  '18:00',
-  '18:30',
-  '19:00',
-  '19:30',
-  '20:00',
-  '20:30',
-  '21:00',
-  '21:30',
-  '22:00',
-  '22:30',
-];
-
 export const MAX_GUESTS = 12;
+
+/** A booking lasts 1 hour by default; guests can extend it up to this many hours. */
+export const MAX_HOURS = 4;
 
 /** How many days ahead (including today) a table can be booked. */
 export const BOOKING_WINDOW_DAYS = 14;
@@ -22,10 +9,42 @@ export const BOOKING_WINDOW_DAYS = 14;
 /** All restaurants are in Bishkek; "today" and "past" are judged by its clock. */
 const TIME_ZONE = 'Asia/Bishkek';
 
-// The same values as SQL expressions, for queries that need them inline.
-export const SQL_SLOT_TIMES = `ARRAY[${SLOT_TIMES.map((t) => `'${t}'`).join(', ')}]`;
 export const SQL_TODAY = `(NOW() AT TIME ZONE '${TIME_ZONE}')::date`;
 export const SQL_NOW_TIME = `to_char(NOW() AT TIME ZONE '${TIME_ZONE}', 'HH24:MI')`;
+
+/**
+ * Opening and closing hour parsed from the free-text work time ("Mon–Sun: 12:00–23:00").
+ * Unparsable → 10–22; closing at or before opening (00:00, past midnight) → 24.
+ */
+const HOURS_RE = String.raw`'(\d{1,2}):\d{2}\D+(\d{1,2}):\d{2}'`;
+export const sqlOpenHour = (workTime: string) =>
+  `(SELECT CASE WHEN m IS NULL THEN 10 ELSE LEAST(m[1]::int, 23) END
+    FROM regexp_match(${workTime}, ${HOURS_RE}) AS x(m))`;
+export const sqlCloseHour = (workTime: string) =>
+  `(SELECT CASE WHEN m IS NULL THEN 22
+                WHEN m[2]::int <= m[1]::int OR m[2]::int > 24 THEN 24
+                ELSE m[2]::int END
+    FROM regexp_match(${workTime}, ${HOURS_RE}) AS x(m))`;
+
+/** 'HH:mm' column → minutes since midnight. */
+export const sqlMinutes = (time: string) =>
+  `(split_part(${time}, ':', 1)::int * 60 + split_part(${time}, ':', 2)::int)`;
+
+/** Booking `b` overlaps [start, end) given in minutes. */
+export const sqlOverlaps = (start: string, end: string) =>
+  `${sqlMinutes('b.time')} < ${end} AND ${start} < ${sqlMinutes('b.time')} + b.hours * 60`;
+
+export const toMinutes = (time: string) => {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/** Hourly start times from opening to the last hour before closing. */
+export const slotTimes = (open: number, close: number) =>
+  Array.from(
+    { length: Math.max(0, close - open) },
+    (_, i) => `${String(open + i).padStart(2, '0')}:00`,
+  );
 
 /** Current date ('YYYY-MM-DD') and time ('HH:mm') in the restaurants' city. */
 export function nowInCity(now = new Date()): { date: string; time: string } {

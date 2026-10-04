@@ -1,4 +1,11 @@
-import { SQL_SLOT_TIMES, SQL_TODAY, SQL_NOW_TIME } from '../bookings/slots.js';
+import {
+  SQL_NOW_TIME,
+  SQL_TODAY,
+  sqlCloseHour,
+  sqlMinutes,
+  sqlOpenHour,
+  sqlOverlaps,
+} from '../bookings/slots.js';
 
 export interface RestaurantRow {
   id: string;
@@ -43,7 +50,7 @@ export interface Restaurant {
   gisLink: string | null;
   latitude: number | null;
   longitude: number | null;
-  /** A table for two is still free at some slot later today. */
+  /** A table for two is still free for an hour at some slot later today. */
   availableToday: boolean;
   /** Seats at the biggest table in use; 0 when there are none. */
   maxSeats: number;
@@ -80,13 +87,13 @@ export const RESTAURANT_SELECT = `
           WHERE t.restaurant_id = r.id AND t.is_available) AS max_seats,
          EXISTS (
            SELECT 1
-           FROM unnest(${SQL_SLOT_TIMES}) AS slot
+           FROM generate_series(${sqlOpenHour('r.work_time')}, ${sqlCloseHour('r.work_time')} - 1) AS h
            JOIN restaurant_tables t ON t.restaurant_id = r.id AND t.is_available AND t.capacity >= 2
-           WHERE slot > ${SQL_NOW_TIME}
+           WHERE h * 60 > ${sqlMinutes(SQL_NOW_TIME)}
              AND NOT EXISTS (
                SELECT 1 FROM bookings b
-               WHERE b.table_id = t.id AND b.date = ${SQL_TODAY} AND b.time = slot
-                 AND b.status <> 'CANCELLED'
+               WHERE b.table_id = t.id AND b.date = ${SQL_TODAY}
+                 AND b.status <> 'CANCELLED' AND ${sqlOverlaps('h * 60', '(h + 1) * 60')}
              )
          ) AS available_today
   FROM restaurants r`;
