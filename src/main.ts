@@ -1,5 +1,6 @@
 import { INestApplicationContext, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import type { ServerOptions } from 'socket.io';
 import { AppModule } from './app.module.js';
@@ -22,7 +23,10 @@ class CorsIoAdapter extends IoAdapter {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // Behind Render's proxy every request comes from the proxy's address; without
+  // this all visitors share one rate-limit bucket (req.ip).
+  app.set('trust proxy', 1);
   app.enableCors({ origin: process.env.FRONTEND_URL });
   app.useWebSocketAdapter(new CorsIoAdapter(app, process.env.FRONTEND_URL));
   app.useGlobalPipes(
@@ -32,6 +36,6 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  await app.listen(process.env.PORT ?? 3000, "0.0.0.0");
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 await bootstrap();

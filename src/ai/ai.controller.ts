@@ -1,4 +1,11 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { RateLimiter } from '../common/rate-limiter.js';
 import { AiService } from './ai.service.js';

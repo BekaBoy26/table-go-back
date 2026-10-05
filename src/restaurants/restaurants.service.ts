@@ -44,7 +44,8 @@ export class RestaurantsService {
     const params: unknown[] = [];
 
     if (search) {
-      params.push(`%${search}%`);
+      // % and _ typed by the user are literal characters, not wildcards
+      params.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
       conditions.push(
         `(name ILIKE $${params.length} OR address ILIKE $${params.length} OR gis_address ILIKE $${params.length})`,
       );

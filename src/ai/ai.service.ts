@@ -22,8 +22,6 @@ export interface AiSearchResult {
   ai: boolean;
 }
 
-type Entry = { restaurant: Restaurant; maxSeats: number };
-
 /** Gemini is busy (503) or the quota is used up (429): answer without it. */
 class AiUnavailableError extends Error {}
 
@@ -33,7 +31,18 @@ class AiUnavailableError extends Error {}
  */
 const SYNONYMS: Record<string, string[]> = {
   italian: ['итальян', 'паст', 'пицц', 'pasta', 'pizza'],
-  asian: ['азиат', 'суши', 'ролл', 'рамен', 'вок', 'япон', 'sushi', 'ramen', 'wok', 'japan'],
+  asian: [
+    'азиат',
+    'суши',
+    'ролл',
+    'рамен',
+    'вок',
+    'япон',
+    'sushi',
+    'ramen',
+    'wok',
+    'japan',
+  ],
   kyrgyz: ['кыргыз', 'киргиз', 'бешбармак', 'лагман', 'манты', 'national'],
   uzbek: ['узбек', 'плов', 'самса', 'plov', 'pilaf'],
   seafood: ['рыб', 'морепродукт', 'устриц', 'fish', 'oyster'],
@@ -47,9 +56,38 @@ const SYNONYMS: Record<string, string[]> = {
   business: ['делов', 'бизнес', 'встреч', 'meeting'],
   'wi-fi': ['wifi', 'вайфай', 'интернет'],
   quick: ['быстр', 'fast'],
+  european: ['европ', 'europe'],
+  uyghur: ['уйгур', 'лагман', 'ашлянфу', 'ашлян-фу', 'lagman'],
+  indian: ['индий', 'карри', 'curry', 'india'],
+  'coffee & desserts': [
+    'кофе',
+    'кофейн',
+    'десерт',
+    'завтрак',
+    'coffee',
+    'dessert',
+    'cafe',
+  ],
+  'live music': ['живая музык', 'живой музык', 'музык', 'music'],
+  halal: ['халал'],
+  'vegetarian options': ['вегетариан', 'веган', 'vegetarian', 'vegan'],
+  breakfast: ['завтрак', 'утр'],
+  terrace: ['террас', 'веранд', 'terrace'],
+  'kids area': ['детск', 'kids'],
+  'private rooms': ['вип', 'vip', 'кабинк', 'private'],
+  'large groups': ['компани', 'банкет', 'большой', 'group', 'banquet'],
+  delivery: ['доставк', 'delivery'],
 };
 
-const CHEAP_WORDS = ['недорог', 'дешев', 'дёшев', 'бюджетн', 'cheap', 'affordable', 'inexpensive'];
+const CHEAP_WORDS = [
+  'недорог',
+  'дешев',
+  'дёшев',
+  'бюджетн',
+  'cheap',
+  'affordable',
+  'inexpensive',
+];
 /** "Cheap" in the fallback: the menu starts at or below this, KGS. */
 const CHEAP_PRICE = 1000;
 
@@ -121,32 +159,27 @@ export class AiService {
 
   async search(dto: AiSearchDto): Promise<AiSearchResult> {
     const { rows } = await this.db.query<RestaurantRow>(RESTAURANT_SELECT);
-    const catalog = new Map(
-      rows.map((row) => {
-        const restaurant = toRestaurant(row);
-        return [row.id, { restaurant, maxSeats: restaurant.maxSeats }];
-      }),
-    );
-
-    const entries = [...catalog.values()];
-    if (!this.ai) return this.keywordSearch(dto, entries, 'AI search is off');
+    const restaurants = rows.map(toRestaurant);
+    if (!this.ai) {
+      return this.keywordSearch(dto, restaurants, 'AI search is off');
+    }
 
     let reply: { message?: string; matches?: { id: string; reason: string }[] };
     try {
-      reply = await this.ask(this.ai, dto, entries);
+      reply = await this.ask(this.ai, dto, restaurants);
     } catch (err) {
       if (!(err instanceof AiUnavailableError)) throw err;
-      return this.keywordSearch(dto, entries, 'AI is busy right now');
+      return this.keywordSearch(dto, restaurants, 'AI is busy right now');
     }
 
     // The model is told the rules; the server still enforces the hard ones.
-    const seen = new Set<string>();
+    const byId = new Map(restaurants.map((r) => [r.id, r]));
     const matches: AiMatch[] = [];
     for (const { id, reason } of reply.matches ?? []) {
-      const entry = catalog.get(id);
-      if (!entry || seen.has(id) || !fits(entry, dto)) continue;
-      seen.add(id);
-      matches.push({ restaurant: entry.restaurant, reason });
+      const restaurant = byId.get(id);
+      if (!restaurant || !fits(restaurant, dto)) continue;
+      byId.delete(id); // the same pick twice
+      matches.push({ restaurant, reason });
       if (matches.length === MAX_MATCHES) break;
     }
 
@@ -162,7 +195,7 @@ export class AiService {
   /** Fallback without Gemini: cuisine/tag words (and synonyms) found in the request. */
   private keywordSearch(
     dto: AiSearchDto,
-    catalog: Entry[],
+    catalog: Restaurant[],
     why: string,
   ): AiSearchResult {
     const text = `${dto.query} ${dto.atmosphere ?? ''}`.toLowerCase();
@@ -175,8 +208,8 @@ export class AiService {
     const wantsCheap = CHEAP_WORDS.some((w) => text.includes(w));
 
     const matches = catalog
-      .filter((entry) => fits(entry, dto))
-      .map(({ restaurant: r }) => {
+      .filter((r) => fits(r, dto))
+      .map((r) => {
         const hits = [r.cuisine, ...r.tags].filter(
           (t): t is string => !!t && mentions(t),
         );
@@ -211,7 +244,7 @@ export class AiService {
   private async ask(
     ai: GoogleGenAI,
     dto: AiSearchDto,
-    catalog: Entry[],
+    catalog: Restaurant[],
   ): Promise<{ message?: string; matches?: { id: string; reason: string }[] }> {
     const request = {
       request: dto.query,
@@ -219,7 +252,7 @@ export class AiService {
       ...(dto.budget && { budgetPerPersonKgs: dto.budget }),
       ...(dto.atmosphere && { atmosphere: dto.atmosphere }),
     };
-    const restaurants = catalog.map(({ restaurant: r, maxSeats }) => ({
+    const restaurants = catalog.map((r) => ({
       id: r.id,
       name: r.name,
       cuisine: r.cuisine,
@@ -229,7 +262,7 @@ export class AiService {
       description: r.description,
       address: r.address,
       hours: r.workTime,
-      maxTableSeats: maxSeats,
+      maxTableSeats: r.maxSeats,
       availableToday: r.availableToday,
     }));
 
@@ -265,9 +298,9 @@ export class AiService {
 }
 
 /** Hard limits the model's picks must respect. */
-function fits({ restaurant, maxSeats }: Entry, dto: AiSearchDto) {
+function fits(restaurant: Restaurant, dto: AiSearchDto) {
   if (dto.budget && (restaurant.priceMin ?? 0) > dto.budget) return false;
-  if (dto.guests && maxSeats < dto.guests) return false;
+  if (dto.guests && restaurant.maxSeats < dto.guests) return false;
   return true;
 }
 

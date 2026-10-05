@@ -14,16 +14,18 @@ export const SQL_NOW_TIME = `to_char(NOW() AT TIME ZONE '${TIME_ZONE}', 'HH24:MI
 
 /**
  * Opening and closing hour parsed from the free-text work time ("Mon–Sun: 12:00–23:00").
+ * Slots are whole hours inside working hours, so opening at 07:30 starts at 08:00.
  * Unparsable → 10–22; closing at or before opening (00:00, past midnight) → 24.
  */
-const HOURS_RE = String.raw`'(\d{1,2}):\d{2}\D+(\d{1,2}):\d{2}'`;
+const HOURS_RE = String.raw`'(\d{1,2}):(\d{2})\D+(\d{1,2}):\d{2}'`;
 export const sqlOpenHour = (workTime: string) =>
-  `(SELECT CASE WHEN m IS NULL THEN 10 ELSE LEAST(m[1]::int, 23) END
+  `(SELECT CASE WHEN m IS NULL THEN 10
+                ELSE LEAST(m[1]::int + (m[2]::int > 0)::int, 23) END
     FROM regexp_match(${workTime}, ${HOURS_RE}) AS x(m))`;
 export const sqlCloseHour = (workTime: string) =>
   `(SELECT CASE WHEN m IS NULL THEN 22
-                WHEN m[2]::int <= m[1]::int OR m[2]::int > 24 THEN 24
-                ELSE m[2]::int END
+                WHEN m[3]::int <= m[1]::int OR m[3]::int > 24 THEN 24
+                ELSE m[3]::int END
     FROM regexp_match(${workTime}, ${HOURS_RE}) AS x(m))`;
 
 /** 'HH:mm' column → minutes since midnight. */

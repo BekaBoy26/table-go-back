@@ -47,7 +47,10 @@ export class AuthService {
         'This account uses Google sign-in — press "Continue with Google"',
       );
     }
-    const ok = await verifyPassword(password, row?.password ?? (await DUMMY_HASH));
+    const ok = await verifyPassword(
+      password,
+      row?.password ?? (await DUMMY_HASH),
+    );
     if (!row || !ok) {
       throw new UnauthorizedException('Wrong email or password');
     }
